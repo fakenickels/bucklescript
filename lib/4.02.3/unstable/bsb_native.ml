@@ -17457,17 +17457,18 @@ let () =
        | None -> 
          (* [-make-world] should never be combined with [-package-specs] *)
          let make_world = !make_world in 
-         ( match make_world, !force_regenerate with
-           | false, false -> 
+         let force_regenerate = !force_regenerate in  
+         let watch_mode = !watch_mode in 
+         (if not make_world && not force_regenerate then           
              (* [regenerate_ninja] is not triggered in this case
                 There are several cases we wish ninja will not be triggered.
                 [bsb -clean-world]
                 [bsb -regen ]
              *)
-             if !watch_mode then begin
+             if watch_mode then begin
                watch_exit ()
              end 
-           | make_world, force_regenerate ->
+           else
              let config_opt = 
                Bsb_ninja_regen.regenerate_ninja 
                  ~generate_watch_metadata:true 
@@ -17477,16 +17478,15 @@ let () =
              if make_world then begin
                Bsb_world.make_world_deps cwd config_opt
              end;
-             if !watch_mode then begin
+             if watch_mode then 
                watch_exit ()
                (* ninja is not triggered in this case
                   There are several cases we wish ninja will not be triggered.
                   [bsb -clean-world]
                   [bsb -regen ]
                *)
-             end else if make_world then begin
-               ninja_command_exit  vendor_ninja [||] 
-             end
+              else if make_world then 
+               ninja_command_exit  vendor_ninja [||]              
          )
       )
   with 
