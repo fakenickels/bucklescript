@@ -17460,15 +17460,7 @@ let () =
           let make_world = !make_world in 
           let force_regenerate = !force_regenerate in  
           let watch_mode = !watch_mode in 
-          if not make_world && not force_regenerate then           
-            (* [regenerate_ninja] is not triggered in this case
-               There are several cases we wish ninja will not be triggered.
-               [bsb -clean-world]
-               [bsb -regen ]
-            *)
-            (if watch_mode then 
-               program_exit ())
-          else
+          if make_world ||force_regenerate then           
             let config_opt = 
               Bsb_ninja_regen.regenerate_ninja 
                 ~generate_watch_metadata:true 
