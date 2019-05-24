@@ -136,20 +136,26 @@ let () =
 
   let vendor_ninja = bsc_dir // "ninja.exe" in  
   try 
+    (* specialize this path [bsb.exe] which is used in watcher 
+       ninja is not triggered in this case
+       There are several cases we wish ninja will not be triggered.
+       [bsb -clean-world]
+       [bsb -regen ]
+    *)
     if Array.length Sys.argv = 1 then
-      (* specialize this path [bsb.exe] which is used in watcher *)
       (Bsb_ninja_regen.regenerate_ninja 
          ~override_package_specs:None ~not_dev:false 
          ~generate_watch_metadata:true
          ~forced:false 
          cwd bsc_dir |> ignore;
        ninja_command_exit  vendor_ninja [||] )
-    else
+    else      
       begin 
-        Arg.parse bsb_main_flags handle_anonymous_arg usage;
-        (* first, check whether we're in boilerplate generation mode, aka -init foo -theme bar *)
+        Arg.parse bsb_main_flags handle_anonymous_arg usage;        
         match !generate_theme_with_path with
-        | Some path -> Bsb_theme_init.init_sample_project ~cwd ~theme:!current_theme path
+        | Some path -> 
+          (* first, check whether we're in boilerplate generation mode, aka -init foo -theme bar *)
+          Bsb_theme_init.init_sample_project ~cwd ~theme:!current_theme path
         | None -> 
           (* [-make-world] should never be combined with [-package-specs] *)
           let make_world = !make_world in 
@@ -161,18 +167,10 @@ let () =
                 ~generate_watch_metadata:true 
                 ~override_package_specs:None 
                 ~not_dev:false 
-                ~forced:force_regenerate cwd bsc_dir  in
-            if make_world then begin
-              Bsb_world.make_world_deps cwd config_opt
-            end;
-            if watch_mode then 
-              program_exit ()
-              (* ninja is not triggered in this case
-                 There are several cases we wish ninja will not be triggered.
-                 [bsb -clean-world]
-                 [bsb -regen ]
-              *)
-            else if make_world then 
+                ~forced:force_regenerate cwd bsc_dir in
+            if make_world then
+              Bsb_world.make_world_deps cwd config_opt;
+            if not watch_mode && make_world then 
               ninja_command_exit  vendor_ninja [||]              
       end
   with 
