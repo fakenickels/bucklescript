@@ -2133,6 +2133,11 @@ val fold_left:
 
 val singleton_exn:     
     'a list -> 'a
+
+val mem_string :     
+    string list -> 
+    string -> 
+    bool
 end = struct
 #1 "ext_list.ml"
 (* Copyright (C) 2015-2016 Bloomberg Finance L.P.
@@ -2840,6 +2845,10 @@ let rec fold_left2 l1 l2 accu f =
 
 let singleton_exn xs = match xs with [x] -> x | _ -> assert false
 
+let rec mem_string (xs : string list) (x : string) = 
+  match xs with 
+    [] -> false
+  | a::l ->  a = x  || mem_string l x
 
 end
 module Map_gen
@@ -6848,8 +6857,13 @@ type package_context = {
 let pp_packages_rev ppf lst = 
   Ext_list.rev_iter lst (fun  s ->  Format.fprintf ppf "%s " s) 
 
-let rec walk_all_deps_aux visited paths top dir cb =
-  let bsconfig_json =  (dir // Literals.bsconfig_json) in
+let rec walk_all_deps_aux 
+  (visited : string String_hashtbl.t) 
+  (paths : string list) 
+  (top : bool) 
+  (dir : string) 
+  (cb : package_context -> unit) =
+  let bsconfig_json =  dir // Literals.bsconfig_json in
   match Ext_json_parse.parse_json_from_file bsconfig_json with
   | Obj {map; loc} ->
     let cur_package_name = 
@@ -6859,11 +6873,9 @@ let rec walk_all_deps_aux visited paths top dir cb =
       | None -> Bsb_exception.errorf ~loc "package name missing in %s/bsconfig.json" dir 
     in 
     let package_stacks = cur_package_name :: paths in 
-    let () = 
-      Bsb_log.info "@{<info>Package stack:@} %a @." pp_packages_rev
-        package_stacks 
-    in 
-    if List.mem cur_package_name paths then
+    Bsb_log.info "@{<info>Package stack:@} %a @." pp_packages_rev
+      package_stacks ;    
+    if Ext_list.mem_string paths cur_package_name  then
       begin
         Bsb_log.error "@{<error>Cyclic dependencies in package stack@}@.";
         exit 2 
@@ -9963,7 +9975,7 @@ let rec
             fun name -> Str.string_match re name 0 
           | Some (Str {str = s}) , _::_ -> 
             let re = Str.regexp s in   
-            fun name -> Str.string_match re name 0 && not (List.mem name excludes)
+            fun name -> Str.string_match re name 0 && not (Ext_list.mem_string excludes name)
           | Some x, _ -> Bsb_exception.errorf ~loc "slow-re expect a string literal"
           | None , _ -> Bsb_exception.errorf ~loc  "missing field: slow-re"  in 
         cur_sources := Ext_array.fold_left (Lazy.force file_array) !cur_sources (fun acc name -> 
@@ -17206,14 +17218,9 @@ let (//) = Ext_path.combine
 (** TODO: create the animation effect 
     logging installed files
 *)
-let install_targets cwd (config : Bsb_config_types.t option) =
-  
+let install_targets cwd (config : Bsb_config_types.t option) =  
   let install ~destdir file = 
-    if Bsb_file.install_if_exists ~destdir file  then 
-      begin 
-        ()
-
-      end
+     Bsb_file.install_if_exists ~destdir file  |> ignore
   in
   let install_filename_sans_extension destdir namespace x = 
     let x = 
@@ -17230,21 +17237,19 @@ let install_targets cwd (config : Bsb_config_types.t option) =
     install ~destdir (cwd // Bsb_config.lib_bs//x ^ Literals.suffix_cmti) ;
 
   in   
-  match config with 
-  | None -> ()
-  | Some {files_to_install; namespace; package_name} -> 
-    let destdir = cwd // Bsb_config.lib_ocaml in (* lib is already there after building, so just mkdir [lib/ocaml] *)
-    if not @@ Sys.file_exists destdir then begin Unix.mkdir destdir 0o777  end;
-    begin
-      Bsb_log.info "@{<info>Installing started@}@.";
-      begin match namespace with 
-        | None -> ()
-        | Some x -> 
-          install_filename_sans_extension destdir None  x
-      end;
-      String_hash_set.iter files_to_install (install_filename_sans_extension destdir namespace) ;
-      Bsb_log.info "@{<info>Installing finished@} @.";
-    end
+  Ext_option.iter config (fun {files_to_install; namespace; package_name} -> 
+      let destdir = cwd // Bsb_config.lib_ocaml in (* lib is already there after building, so just mkdir [lib/ocaml] *)
+      if not @@ Sys.file_exists destdir then begin Unix.mkdir destdir 0o777  end;
+      begin
+        Bsb_log.info "@{<info>Installing started@}@.";
+        begin match namespace with 
+          | None -> ()
+          | Some x -> 
+            install_filename_sans_extension destdir None  x
+        end;
+        String_hash_set.iter files_to_install (install_filename_sans_extension destdir namespace) ;
+        Bsb_log.info "@{<info>Installing finished@} @.";
+      end)
 
 
 

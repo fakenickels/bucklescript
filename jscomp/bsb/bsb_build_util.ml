@@ -176,8 +176,13 @@ type package_context = {
 let pp_packages_rev ppf lst = 
   Ext_list.rev_iter lst (fun  s ->  Format.fprintf ppf "%s " s) 
 
-let rec walk_all_deps_aux visited paths top dir cb =
-  let bsconfig_json =  (dir // Literals.bsconfig_json) in
+let rec walk_all_deps_aux 
+  (visited : string String_hashtbl.t) 
+  (paths : string list) 
+  (top : bool) 
+  (dir : string) 
+  (cb : package_context -> unit) =
+  let bsconfig_json =  dir // Literals.bsconfig_json in
   match Ext_json_parse.parse_json_from_file bsconfig_json with
   | Obj {map; loc} ->
     let cur_package_name = 
@@ -187,11 +192,9 @@ let rec walk_all_deps_aux visited paths top dir cb =
       | None -> Bsb_exception.errorf ~loc "package name missing in %s/bsconfig.json" dir 
     in 
     let package_stacks = cur_package_name :: paths in 
-    let () = 
-      Bsb_log.info "@{<info>Package stack:@} %a @." pp_packages_rev
-        package_stacks 
-    in 
-    if List.mem cur_package_name paths then
+    Bsb_log.info "@{<info>Package stack:@} %a @." pp_packages_rev
+      package_stacks ;    
+    if Ext_list.mem_string paths cur_package_name  then
       begin
         Bsb_log.error "@{<error>Cyclic dependencies in package stack@}@.";
         exit 2 

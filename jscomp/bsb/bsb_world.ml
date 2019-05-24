@@ -28,14 +28,9 @@ let (//) = Ext_path.combine
 (** TODO: create the animation effect 
     logging installed files
 *)
-let install_targets cwd (config : Bsb_config_types.t option) =
-  
+let install_targets cwd (config : Bsb_config_types.t option) =  
   let install ~destdir file = 
-    if Bsb_file.install_if_exists ~destdir file  then 
-      begin 
-        ()
-
-      end
+     Bsb_file.install_if_exists ~destdir file  |> ignore
   in
   let install_filename_sans_extension destdir namespace x = 
     let x = 
@@ -52,21 +47,19 @@ let install_targets cwd (config : Bsb_config_types.t option) =
     install ~destdir (cwd // Bsb_config.lib_bs//x ^ Literals.suffix_cmti) ;
 
   in   
-  match config with 
-  | None -> ()
-  | Some {files_to_install; namespace; package_name} -> 
-    let destdir = cwd // Bsb_config.lib_ocaml in (* lib is already there after building, so just mkdir [lib/ocaml] *)
-    if not @@ Sys.file_exists destdir then begin Unix.mkdir destdir 0o777  end;
-    begin
-      Bsb_log.info "@{<info>Installing started@}@.";
-      begin match namespace with 
-        | None -> ()
-        | Some x -> 
-          install_filename_sans_extension destdir None  x
-      end;
-      String_hash_set.iter files_to_install (install_filename_sans_extension destdir namespace) ;
-      Bsb_log.info "@{<info>Installing finished@} @.";
-    end
+  Ext_option.iter config (fun {files_to_install; namespace; package_name} -> 
+      let destdir = cwd // Bsb_config.lib_ocaml in (* lib is already there after building, so just mkdir [lib/ocaml] *)
+      if not @@ Sys.file_exists destdir then begin Unix.mkdir destdir 0o777  end;
+      begin
+        Bsb_log.info "@{<info>Installing started@}@.";
+        begin match namespace with 
+          | None -> ()
+          | Some x -> 
+            install_filename_sans_extension destdir None  x
+        end;
+        String_hash_set.iter files_to_install (install_filename_sans_extension destdir namespace) ;
+        Bsb_log.info "@{<info>Installing finished@} @.";
+      end)
 
 
 
