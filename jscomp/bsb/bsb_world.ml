@@ -74,32 +74,31 @@ let build_bs_deps cwd (deps : Bsb_package_specs.t) =
 
   let bsc_dir = Bsb_build_util.get_bsc_dir ~cwd in
   let vendor_ninja = bsc_dir // "ninja.exe" in
-  Bsb_build_util.walk_all_deps  cwd
-    (fun {top; cwd} ->
-       if not top then
-         begin 
-           let config_opt = Bsb_ninja_regen.regenerate_ninja ~not_dev:true
-               ~generate_watch_metadata:false
-               ~override_package_specs:(Some deps) 
-               ~forced:true
-               cwd bsc_dir  in (* set true to force regenrate ninja file so we have [config_opt]*)
-           let command = 
+  Bsb_build_util.walk_all_deps  cwd (fun {top; cwd} ->
+      if not top then
+        begin 
+          let config_opt = Bsb_ninja_regen.regenerate_ninja ~not_dev:true
+              ~generate_watch_metadata:false
+              ~override_package_specs:(Some deps) 
+              ~forced:true
+              cwd bsc_dir  in (* set true to force regenrate ninja file so we have [config_opt]*)
+          let command = 
             {Bsb_unix.cmd = vendor_ninja;
-              cwd = cwd // Bsb_config.lib_bs;
-              args  = [|vendor_ninja|]
-             } in     
-           let eid =
-             Bsb_unix.run_command_execv
-             command in 
-           if eid <> 0 then   
+             cwd = cwd // Bsb_config.lib_bs;
+             args  = [|vendor_ninja|]
+            } in     
+          let eid =
+            Bsb_unix.run_command_execv
+              command in 
+          if eid <> 0 then   
             Bsb_unix.command_fatal_error command eid;
-           (* When ninja is not regenerated, ninja will still do the build, 
-              still need reinstall check
-              Note that we can check if ninja print "no work to do", 
-              then don't need reinstall more
-           *)
-           install_targets cwd config_opt;
-         end
+          (* When ninja is not regenerated, ninja will still do the build, 
+             still need reinstall check
+             Note that we can check if ninja print "no work to do", 
+             then don't need reinstall more
+          *)
+          install_targets cwd config_opt;
+        end
     )
 
 
@@ -113,5 +112,5 @@ let make_world_deps cwd (config : Bsb_config_types.t option) =
          it wants
       *)
       Bsb_config_parse.package_specs_from_bsconfig ()
-    | Some {package_specs} -> package_specs in
+    | Some config -> config.package_specs in
   build_bs_deps cwd deps

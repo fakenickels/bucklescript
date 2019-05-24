@@ -14173,7 +14173,7 @@ let (//) = Ext_path.combine
 *)
 let regenerate_ninja 
     ~not_dev 
-    ~override_package_specs
+    ~(override_package_specs : Bsb_package_specs.t option)
     ~generate_watch_metadata 
     ~forced cwd bsc_dir
   : Bsb_config_types.t option =
@@ -14182,41 +14182,38 @@ let regenerate_ninja
     Bsb_ninja_check.check 
       ~cwd  
       ~forced ~file:output_deps in
-  let () = 
-    Bsb_log.info
-      "@{<info>BSB check@} build spec : %a @." Bsb_ninja_check.pp_check_result check_result in 
-  begin match check_result  with 
-    | Good ->
-      None  (* Fast path, no need regenerate ninja *)
-    | Bsb_forced 
-    | Bsb_bsc_version_mismatch 
-    | Bsb_file_not_exist 
-    | Bsb_source_directory_changed  
-    | Other _ -> 
-      if check_result = Bsb_bsc_version_mismatch then begin 
-        Bsb_log.info "@{<info>Different compiler version@}: clean current repo";
-        Bsb_clean.clean_self bsc_dir cwd; 
-      end ; 
-      Bsb_build_util.mkp (cwd // Bsb_config.lib_bs); 
-      let config = 
-        Bsb_config_parse.interpret_json 
-          ~override_package_specs
-          ~bsc_dir
-          ~generate_watch_metadata
-          ~not_dev
-          cwd in 
-      begin 
-        Bsb_merlin_gen.merlin_file_gen ~cwd
-          (bsc_dir // bsppx_exe) config;       
-        Bsb_ninja_gen.output_ninja_and_namespace_map 
-          ~cwd ~bsc_dir ~not_dev config ;         
-        (* PR2184: we still need record empty dir 
-            since it may add files in the future *)  
-        Bsb_ninja_check.record ~cwd ~file:output_deps 
-        (Literals.bsconfig_json::config.globbed_dirs) ;
-        Some config 
-      end 
-  end
+  Bsb_log.info
+    "@{<info>BSB check@} build spec : %a @." Bsb_ninja_check.pp_check_result check_result ;
+  match check_result  with 
+  | Good ->
+    None  (* Fast path, no need regenerate ninja *)
+  | Bsb_forced 
+  | Bsb_bsc_version_mismatch 
+  | Bsb_file_not_exist 
+  | Bsb_source_directory_changed  
+  | Other _ -> 
+    if check_result = Bsb_bsc_version_mismatch then begin 
+      Bsb_log.info "@{<info>Different compiler version@}: clean current repo";
+      Bsb_clean.clean_self bsc_dir cwd; 
+    end ; 
+    Bsb_build_util.mkp (cwd // Bsb_config.lib_bs); 
+    let config = 
+      Bsb_config_parse.interpret_json 
+        ~override_package_specs
+        ~bsc_dir
+        ~generate_watch_metadata
+        ~not_dev
+        cwd in 
+    Bsb_merlin_gen.merlin_file_gen ~cwd
+      (bsc_dir // bsppx_exe) config;       
+    Bsb_ninja_gen.output_ninja_and_namespace_map 
+      ~cwd ~bsc_dir ~not_dev config ;         
+    (* PR2184: we still need record empty dir 
+        since it may add files in the future *)  
+    Bsb_ninja_check.record ~cwd ~file:output_deps 
+      (Literals.bsconfig_json::config.globbed_dirs) ;
+    Some config 
+
 
 
 end
@@ -17255,32 +17252,31 @@ let build_bs_deps cwd (deps : Bsb_package_specs.t) =
 
   let bsc_dir = Bsb_build_util.get_bsc_dir ~cwd in
   let vendor_ninja = bsc_dir // "ninja.exe" in
-  Bsb_build_util.walk_all_deps  cwd
-    (fun {top; cwd} ->
-       if not top then
-         begin 
-           let config_opt = Bsb_ninja_regen.regenerate_ninja ~not_dev:true
-               ~generate_watch_metadata:false
-               ~override_package_specs:(Some deps) 
-               ~forced:true
-               cwd bsc_dir  in (* set true to force regenrate ninja file so we have [config_opt]*)
-           let command = 
+  Bsb_build_util.walk_all_deps  cwd (fun {top; cwd} ->
+      if not top then
+        begin 
+          let config_opt = Bsb_ninja_regen.regenerate_ninja ~not_dev:true
+              ~generate_watch_metadata:false
+              ~override_package_specs:(Some deps) 
+              ~forced:true
+              cwd bsc_dir  in (* set true to force regenrate ninja file so we have [config_opt]*)
+          let command = 
             {Bsb_unix.cmd = vendor_ninja;
-              cwd = cwd // Bsb_config.lib_bs;
-              args  = [|vendor_ninja|]
-             } in     
-           let eid =
-             Bsb_unix.run_command_execv
-             command in 
-           if eid <> 0 then   
+             cwd = cwd // Bsb_config.lib_bs;
+             args  = [|vendor_ninja|]
+            } in     
+          let eid =
+            Bsb_unix.run_command_execv
+              command in 
+          if eid <> 0 then   
             Bsb_unix.command_fatal_error command eid;
-           (* When ninja is not regenerated, ninja will still do the build, 
-              still need reinstall check
-              Note that we can check if ninja print "no work to do", 
-              then don't need reinstall more
-           *)
-           install_targets cwd config_opt;
-         end
+          (* When ninja is not regenerated, ninja will still do the build, 
+             still need reinstall check
+             Note that we can check if ninja print "no work to do", 
+             then don't need reinstall more
+          *)
+          install_targets cwd config_opt;
+        end
     )
 
 
@@ -17294,7 +17290,7 @@ let make_world_deps cwd (config : Bsb_config_types.t option) =
          it wants
       *)
       Bsb_config_parse.package_specs_from_bsconfig ()
-    | Some {package_specs} -> package_specs in
+    | Some config -> config.package_specs in
   build_bs_deps cwd deps
 end
 module Bsb_main : sig 
